@@ -1,3 +1,0 @@
-HELLO
-My name
-Hello world

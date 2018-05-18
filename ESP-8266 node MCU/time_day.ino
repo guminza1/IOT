@@ -8,9 +8,12 @@ String Day() {
     delay(100);
   }
   time_t now = time(nullptr);
+  struct tm* p_tm = localtime(&now);
   ctime(&now);
   char *a[] = {ctime(&now)};
   String i = String(i + *a);
+  num_day = p_tm->tm_mday;
+
   return i;
 }
 
