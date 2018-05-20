@@ -24,20 +24,23 @@ SoftwareSerial mySerial(D6, D7); //rx tx
 byte adcvalue0, adcvalue1, adcvalue2, adcvalue3;
 
 DHT dht(DHTPIN, DHTTYPE);
-float h;   //readHumidity;
-float t;  //readTemperature;
+float h ; //readHumidity;
+float t ; //readTemperature;
 int t_sec = 1;
+
+int check_net = 0;
 
 unsigned long t_millis = 0;
 int time_tm;
 int time_te;
 
-//varlaible manual
+//variable manual
 String s_m;
 int a = D8;
 int b = 1;// 1 tx D7
 int c = 3;// 3 rx D6
 // end varlaible manual
+
 int LED = D0;
 //status working//
 String s_work;
@@ -46,6 +49,13 @@ String s_work;
 String day_time;
 String history_day, num_day, years;
 String t_h_his, t_h_his1, t_h_his2;
+
+//variable switch_morning_evening   && switch humidity &temperrature
+String sw_morning, sw_evening, sw_h, sw_t;
+
+
+//time current
+int time_current;
 
 void setup() {
   ////////////
@@ -83,7 +93,27 @@ void setup() {
 }
 
 void loop() {
-
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print("Internet reconnecting ");
+    delay(200);
+    Serial.print(".");
+    delay(200);
+    Serial.print(".");
+    delay(200);
+    Serial.print(".");
+    delay(200);
+    Serial.print(".");
+    delay(200);
+    Serial.println(".");
+    check_net = 1;
+    delay(500);
+  }
+  if (check_net == 1) {
+    Serial.println();
+    Serial.print("connected: ");
+    Serial.println(WiFi.localIP());
+    check_net = 0;
+  }
   if (millis() >= t_millis) {
     t_millis += 1000;
     tem_hu();
@@ -98,8 +128,17 @@ void loop() {
   Firebase.setString("Date_Time_Current/hour", hour);
   String minute = day_time.substring(14, 16);
   Firebase.setString("Date_Time_Current/minute", minute);
-  String eq_time = hour + minute;
-  int time_current = eq_time.toInt();
+
+  String minute_s;
+  if (minute.charAt(0) == '0') {
+    minute_s = minute.substring(1);
+  }
+  else {
+    minute_s = minute;
+  }
+
+  String eq_time = hour + minute_s;
+  time_current = eq_time.toInt();
 
   history_day = "\"\\\"" + day + " " + num_day + " " + mont + " " + years + "   Time " + hour + "." + minute + "\"\\\"";
 
@@ -181,7 +220,6 @@ void loop() {
     if (s_work == "0") {
       history_ts();
     }
-
   }
   // end status and history//
 
@@ -193,11 +231,10 @@ void loop() {
   }
 
   // Switch input humidity and time and day//
-  String sw_h = Firebase.getString("/Set_switch/switch_humidity/");
-  String sw_t = Firebase.getString("/Set_switch/switch_temperrature/");
-
-  String sw_morning = Firebase.getString("/Set_switch/switch_morning/");
-  String sw_evening = Firebase.getString("/Set_switch/switch_evening/");
+  sw_h = Firebase.getString("/Set_switch/switch_humidity/");
+  sw_t = Firebase.getString("/Set_switch/switch_temperrature/");
+  sw_morning = Firebase.getString("/Set_switch/switch_morning/");
+  sw_evening = Firebase.getString("/Set_switch/switch_evening/");
 
 
 
@@ -205,7 +242,7 @@ void loop() {
 
   if (sw_h == "\"on\"") {
     String set_h1 = Firebase.getString("/Set_Temperrature_Humidity/set_humidity/");
-    String sub_h1 = set_h1.substring(1, set_h1.length()-1);
+    String sub_h1 = set_h1.substring(1, set_h1.length() - 1);
     float set_h = sub_h1.toFloat();
     if (set_h >=  h) {
       my_Serial();
@@ -213,7 +250,7 @@ void loop() {
   }
   if (sw_t == "\"on\"") {
     String set_t1 = Firebase.getString("/Set_Temperrature_Humidity/set_temperrature/");
-    String sub_t1 = set_t1.substring(1, set_t1.length()-1);
+    String sub_t1 = set_t1.substring(1, set_t1.length() - 1);
     float set_t = sub_t1.toFloat();
     if (set_t <= t) {
       my_Serial();
@@ -224,199 +261,155 @@ void loop() {
   //Monday//
   if (day == "Mon") {
     String sw_mon = Firebase.getString("/Set_switch/switch_monday/");
-
-    if (sw_mon == "\"on\"") {
-      String set_time_morning = Firebase.getString("/Time_setting/Time_morning/");
-      String sub_tm = set_time_morning.substring(1, set_time_morning.length() - 1);
-      time_tm = sub_tm.toInt();
-
-      String set_time_evening = Firebase.getString("/Time_setting/Time_evening/");
-      String sub_te = set_time_evening.substring(1, set_time_evening.length() - 1);
-      time_te = sub_te.toInt();
-
-      if ( sw_morning == "\"on\"" && time_current == time_tm ) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-      }
-
-      if ( sw_evening == "\"on\"" && time_current == time_te) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-      }
+    if (sw_mon == "\"on\"" && sw_h != "\"on\"" && sw_t != "\"on\"") {
+      tm_te();
+      sw_morning_evening();
+    }
+    if (sw_mon == "\"on\"" && sw_h == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_h();
+    }
+    if (sw_mon == "\"on\"" && sw_t == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_t();
+    }
+    if (sw_mon == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_h == "\"on\"") {
+      check_allDay_h();
+    }
+    if (sw_mon == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_t == "\"on\"") {
+      check_allDay_t();
     }
   }
   //__________________________________________________________________________________________________________________
   if (day == "Tue") {
     String sw_tue = Firebase.getString("/Set_switch/switch_tuesday/");
-
-    if (sw_tue == "\"on\"") {
-
-      String set_time_morning = Firebase.getString("/Time_setting/Time_morning/");
-      String sub_tm = set_time_morning.substring(1, set_time_morning.length() - 1);
-      time_tm = sub_tm.toInt();
-
-      String set_time_evening = Firebase.getString("/Time_setting/Time_evening/");
-      String sub_te = set_time_evening.substring(1, set_time_evening.length() - 1);
-      time_te = sub_te.toInt();
-
-      if (sw_morning == "\"on\"" && time_current == time_tm) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-      }
-      if ( sw_evening == "\"on\"" && time_current == time_te) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-      }
+    if (sw_tue == "\"on\"" && sw_h != "\"on\"" && sw_t != "\"on\"") {
+      tm_te();
+      sw_morning_evening();
+    }
+    if (sw_tue == "\"on\"" && sw_h == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_h();
+    }
+    if (sw_tue == "\"on\"" && sw_t == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_t();
+    }
+    if (sw_tue == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_h == "\"on\"") {
+      check_allDay_h();
+    }
+    if (sw_tue == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_t == "\"on\"") {
+      check_allDay_t();
     }
   }
   //__________________________________________________________________________________________________________________
   if (day == "Wed") {
     String sw_wed = Firebase.getString("/Set_switch/switch_wednesday/");
-
-    if (sw_wed == "\"on\"") {
-
-      String set_time_morning = Firebase.getString("/Time_setting/Time_morning/");
-      String sub_tm = set_time_morning.substring(1, set_time_morning.length() - 1);
-      time_tm = sub_tm.toInt();
-
-      String set_time_evening = Firebase.getString("/Time_setting/Time_evening/");
-      String sub_te = set_time_evening.substring(1, set_time_evening.length() - 1);
-      time_te = sub_te.toInt();
-
-      if (sw_morning == "\"on\"" && time_current == time_tm) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-      }
-      if (sw_evening == "\"on\"" && time_current == time_te) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-      }
+    if (sw_wed == "\"on\"" && sw_h != "\"on\"" && sw_t != "\"on\"") {
+      tm_te();
+      sw_morning_evening();
+    }
+    if (sw_wed == "\"on\"" && sw_h == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_h();
+    }
+    if (sw_wed == "\"on\"" && sw_t == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_t();
+    }
+    if (sw_wed == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_h == "\"on\"") {
+      check_allDay_h();
+    }
+    if (sw_wed == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_t == "\"on\"") {
+      check_allDay_t();
     }
   }
   //__________________________________________________________________________________________________________________
   if (day == "Thu") {
     String sw_thu = Firebase.getString("/Set_switch/switch_thursday/");
-
-    if (sw_thu == "\"on\"") {
-
-      String set_time_morning = Firebase.getString("/Time_setting/Time_morning/");
-      String sub_tm = set_time_morning.substring(1, set_time_morning.length() - 1);
-      time_tm = sub_tm.toInt();
-
-      String set_time_evening = Firebase.getString("/Time_setting/Time_evening/");
-      String sub_te = set_time_evening.substring(1, set_time_evening.length() - 1);
-      time_te = sub_te.toInt();
-
-      if (sw_morning == "\"on\"" && time_current == time_tm) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-      }
-      if (sw_evening == "\"on\"" && time_current == time_te) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-      }
+    if (sw_thu == "\"on\"" && sw_h != "\"on\"" && sw_t != "\"on\"") {
+      tm_te();
+      sw_morning_evening();
+    }
+    if (sw_thu == "\"on\"" && sw_h == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_h();
+    }
+    if (sw_thu == "\"on\"" && sw_t == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_t();
+    }
+    if (sw_thu == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_h == "\"on\"") {
+      check_allDay_h();
+    }
+    if (sw_thu == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_t == "\"on\"") {
+      check_allDay_t();
     }
   }
   //__________________________________________________________________________________________________________________
   if (day == "Fri") {
     String sw_fri = Firebase.getString("/Set_switch/switch_friday/");
-
-    if (sw_fri == "\"on\"") {
-
-      String set_time_morning = Firebase.getString("/Time_setting/Time_morning/");
-      String sub_tm = set_time_morning.substring(1, set_time_morning.length() - 1);
-      time_tm = sub_tm.toInt();
-
-      String set_time_evening = Firebase.getString("/Time_setting/Time_evening/");
-      String sub_te = set_time_evening.substring(1, set_time_evening.length() - 1);
-      time_te = sub_te.toInt();
-
-
-      if (sw_morning == "\"on\"" && time_current == time_tm) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-      }
-      if (sw_evening == "\"on\"" && time_current == time_te) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-      }
+    if (sw_fri == "\"on\"" && sw_h != "\"on\"" && sw_t != "\"on\"") {
+      tm_te();
+      sw_morning_evening();
+    }
+    if (sw_fri == "\"on\"" && sw_h == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_h();
+    }
+    if (sw_fri == "\"on\"" && sw_t == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_t();
+    }
+    if (sw_fri == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_h == "\"on\"") {
+      check_allDay_h();
+    }
+    if (sw_fri == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_t == "\"on\"") {
+      check_allDay_t();
     }
   }
   //__________________________________________________________________________________________________________________
   if (day == "Sat") {
     String sw_sat = Firebase.getString("/Set_switch/switch_saturday/");
-
-    if (sw_sat == "\"on\"") {
-
-      String set_time_morning = Firebase.getString("/Time_setting/Time_morning/");
-      String sub_tm = set_time_morning.substring(1, set_time_morning.length() - 1);
-      time_tm = sub_tm.toInt();
-
-      String set_time_evening = Firebase.getString("/Time_setting/Time_evening/");
-      String sub_te = set_time_evening.substring(1, set_time_evening.length() - 1);
-      time_te = sub_te.toInt();
-
-      if (sw_morning == "\"on\"" && time_current == time_tm) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-      }
-      if (sw_evening == "\"on\"" && time_current == time_te) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-      }
+    if (sw_sat == "\"on\"" && sw_h != "\"on\"" && sw_t != "\"on\"") {
+      tm_te();
+      sw_morning_evening();
+    }
+    if (sw_sat == "\"on\"" && sw_h == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_h();
+    }
+    if (sw_sat == "\"on\"" && sw_t == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_t();
+    }
+    if (sw_sat == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_h == "\"on\"") {
+      check_allDay_h();
+    }
+    if (sw_sat == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_t == "\"on\"") {
+      check_allDay_t();
     }
   }
   //__________________________________________________________________________________________________________________
   if (day == "Sun") {
     String sw_sun = Firebase.getString("/Set_switch/switch_sunday/");
-
-    if (sw_sun == "\"on\"") {
-
-      String set_time_morning = Firebase.getString("/Time_setting/Time_morning/");
-      String sub_tm = set_time_morning.substring(1, set_time_morning.length() - 1);
-      time_tm = sub_tm.toInt();
-
-      String set_time_evening = Firebase.getString("/Time_setting/Time_evening/");
-      String sub_te = set_time_evening.substring(1, set_time_evening.length() - 1);
-      time_te = sub_te.toInt();
-
-      if (sw_morning == "\"on\"" && time_current == time_tm  ) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-
-      }
-      if (sw_evening == "\"on\"" && time_current == time_te) {
-        if (t_sec == 1) {
-          my_Serial();
-          t_sec = 0;
-        }
-      }
+    if (sw_sun == "\"on\"" && sw_h != "\"on\"" && sw_t != "\"on\"") {
+      tm_te();
+      sw_morning_evening();
+    }
+    if (sw_sun == "\"on\"" && sw_h == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_h();
+    }
+    if (sw_sun == "\"on\"" && sw_t == "\"on\"") {
+      tm_te();
+      check_sw_day_sw_t();
+    }
+    if (sw_sun == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_h == "\"on\"") {
+      check_allDay_h();
+    }
+    if (sw_sun == "\"on\"" && sw_morning != "\"on\"" && sw_evening != "\"on\"" && sw_t == "\"on\"") {
+      check_allDay_t();
     }
   }
   //__________________________________________________________________________________________________________________
@@ -437,40 +430,28 @@ void my_Serial() {
 }
 
 void tem_hu() {
- Wire.beginTransmission(PCF8591);
- Wire.write(0x04);
- Wire.endTransmission();
- Wire.requestFrom(PCF8591, 5);
+  Wire.beginTransmission(PCF8591);
+  Wire.write(0x04);
+  Wire.endTransmission();
+  Wire.requestFrom(PCF8591, 5);
 
- adcvalue0=Wire.read();
- adcvalue0=Wire.read();
- adcvalue1=Wire.read();
- adcvalue2=Wire.read();
- h = (adcvalue0 + adcvalue1 + adcvalue2)/3;
- 
-// Serial.print(adcvalue0);
-// Serial.print(" ,");
-// Serial.print(adcvalue1); 
-// Serial.print(" ,");
-// Serial.print(adcvalue2); 
-// Serial.print(" ,");
-// Serial.print(adcvalue3); 
-// Serial.println();
-// Serial.println(h);
- 
- Wire.beginTransmission(PCF8591);
- Wire.write(0x40);
- Wire.write(adcvalue0);
- Wire.endTransmission();
- 
+  adcvalue0 = Wire.read();
+  adcvalue0 = Wire.read();
+  adcvalue1 = Wire.read();
+  adcvalue2 = Wire.read();
+  h = (adcvalue0 + adcvalue1 + adcvalue2) / 3;
+
+
+  Wire.beginTransmission(PCF8591);
+  Wire.write(0x40);
+  Wire.write(adcvalue0);
+  Wire.endTransmission();
+
   t = dht.readTemperature();
-//  if (isnan(t)) {
-//    Serial.println("Failed to read from DHT sensor!");
-//    Firebase.setString("/humidity/humidity/", "Error" );
-//    Firebase.setString("/temperrature/temperrature/", "Error" );
-//    delay(500);
-//    return;
-//  }
+  if (isnan(t)) {
+    Firebase.setString("/temperrature/temperrature/", "0" );
+    //delay(500);
+  }
   t_h_his1 = String(h);
   t_h_his2 = String(t);
   t_h_his = "\"\\\"" + t_h_his1 + "°" + "  " + t_h_his2 + "%\"" + "\"\\\"";
@@ -478,4 +459,15 @@ void tem_hu() {
   Firebase.setFloat("/temperrature/temperrature/", t);
 }
 
+//__________________________________________________________________________________________________________________
+//Time moring & evening
+void tm_te() {
+  String set_time_morning = Firebase.getString("/Time_setting/Time_morning/");
+  String sub_tm = set_time_morning.substring(1, set_time_morning.length() - 1);
+  time_tm = sub_tm.toInt();
+
+  String set_time_evening = Firebase.getString("/Time_setting/Time_evening/");
+  String sub_te = set_time_evening.substring(1, set_time_evening.length() - 1);
+  time_te = sub_te.toInt();
+}
 
